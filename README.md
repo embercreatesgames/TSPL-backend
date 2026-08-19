@@ -1,14 +1,46 @@
-# Node.js template
+# MARUP Backend API
 
-This is a Node.js project with an HTTP server.
+Backend API for the MARUP financial platform built with Express.js and Drizzle ORM.
 
-Add your [configuration](https://codesandbox.io/docs/projects/learn/setting-up/tasks) to optimize it for [CodeSandbox](https://codesandbox.io).
+## Tech Stack
 
-## How does this work?
+- **Runtime:** Node.js (ES Modules)
+- **Framework:** Express 5
+- **Database:** PostgreSQL (Neon Serverless)
+- **ORM:** Drizzle ORM
+- **Auth:** JWT + bcryptjs
+- **Security:** Helmet, CORS, Rate Limiting
 
-We run `yarn start` to start an HTTP server that runs on http://localhost:8080. You can open new or existing devtools with the + button next to the devtool tabs.
+## Getting Started
 
-## Resources
+```bash
+npm install
+npm start
+```
 
-- [CodeSandbox — Docs](https://codesandbox.io/docs)
-- [CodeSandbox — Discord](https://discord.gg/Ggarp3pX5H)
+Server runs on `http://localhost:8080`
+
+## Environment Variables
+
+Create a `.env` file:
+
+```
+DATABASE_URL=your_neon_connection_string
+JWT_SECRET=your_secret_key
+PORT=8080
+```
+
+## API Routes
+
+| Route | Description |
+|-------|-------------|
+| `/api/auth/*` | Authentication (register, login) |
+| `/api/wallet/*` | Wallet operations |
+| `/api/invest/*` | Investment plans |
+| `/api/history/*` | Transaction history |
+
+## Database Push
+
+```bash
+npm run db:push
+```
