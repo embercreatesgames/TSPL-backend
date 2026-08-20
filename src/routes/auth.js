@@ -208,3 +208,52 @@ router.put("/profile/update", verifyToken, async (req, res) => {
 });
 
 export default router;
+
+// ==============================================================================
+// 5. ADMIN SETUP (one-time use)
+// ==============================================================================
+router.post("/admin/setup", authLimiter, async (req, res) => {
+  const { fullName, email, mobileNumber, password } = req.body;
+
+  if (!fullName || !email || !mobileNumber || !password) {
+    return res.status(400).json({ error: "All fields are required." });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters." });
+  }
+
+  try {
+    const existing = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase().trim()))
+      .limit(1);
+
+    if (existing.length > 0) {
+      return res.status(409).json({ error: "An account with this email already exists." });
+    }
+
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    const generatedMemberId = "MARUP" + String(Date.now()).slice(-6);
+
+    await db.insert(users).values({
+      fullName: fullName.trim(),
+      email: email.toLowerCase().trim(),
+      mobileNumber: mobileNumber.trim(),
+      password: hashedPassword,
+      memberId: generatedMemberId,
+      kycStatus: "VERIFIED",
+      role: "admin",
+      avatarUrl: "",
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Admin account created successfully!",
+    });
+  } catch (error) {
+    console.error("Admin Setup Error:", error);
+    return res.status(500).json({ error: "Internal system server failure" });
+  }
+});
