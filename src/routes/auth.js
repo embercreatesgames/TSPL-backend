@@ -1,37 +1,54 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { eq, or } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import { db } from "../config/db.js";
-import { users } from "../db/schema.js";
+import { users, epins } from "../db/schema.js";
 import { authLimiter } from "../middleware/rateLimiter.js";
-
-// 🟢 Clean & Separated Named Imports
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
+import { placeNewUserAndProcessCommissions } from "../services/mlm.service.js";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // ==============================================================================
-// 1. REGISTRATION ENDPOINT (Screen 5)
+// 1. REGISTRATION ENDPOINT (MLM-Gated)
 // ==============================================================================
 router.post("/register", authLimiter, async (req, res) => {
-  const { fullName, email, mobileNumber, password } = req.body;
+  const { fullName, email, mobileNumber, password, referralId, pinCode } = req.body;
 
-  if (!fullName || !email || !mobileNumber || !password) {
+  if (!fullName || !email || !mobileNumber || !password || !referralId || !pinCode) {
     return res.status(400).json({
-      error:
-        "All fields (fullName, email, mobileNumber, password) are required.",
+      error: "All fields are required: fullName, email, mobileNumber, password, referralId, pinCode.",
     });
   }
 
   if (password.length < 8) {
-    return res
-      .status(400)
-      .json({ error: "Password must be at least 8 characters long." });
+    return res.status(400).json({ error: "Password must be at least 8 characters long." });
   }
 
   try {
+    const [sponsor] = await db
+      .select()
+      .from(users)
+      .where(eq(users.memberId, referralId.toUpperCase().trim()))
+      .limit(1);
+    if (!sponsor) {
+      return res.status(404).json({ error: "Invalid Referral ID. Sponsor not found." });
+    }
+
+    const [pin] = await db
+      .select()
+      .from(epins)
+      .where(eq(epins.pinCode, pinCode.toUpperCase().trim()))
+      .limit(1);
+    if (!pin) {
+      return res.status(404).json({ error: "Invalid E-PIN. Not found." });
+    }
+    if (pin.status !== "active") {
+      return res.status(400).json({ error: "E-PIN has already been used." });
+    }
+
     const existingUser = await db
       .select()
       .from(users)
@@ -42,31 +59,38 @@ router.post("/register", authLimiter, async (req, res) => {
         )
       )
       .limit(1);
-
     if (existingUser.length > 0) {
-      return res.status(409).json({
-        error: "An account with this email or mobile number already exists.",
-      });
+      return res.status(409).json({ error: "An account with this email or mobile number already exists." });
     }
 
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
     const generatedMemberId = "MARUP" + String(Date.now()).slice(-6);
 
-    await db.insert(users).values({
-      fullName: fullName.trim(),
-      email: email.toLowerCase().trim(),
-      mobileNumber: mobileNumber.trim(),
-      password: hashedPassword,
-      memberId: generatedMemberId,
-      kycStatus: "PENDING",
-      role: "user",
-      avatarUrl: "",
+    let newUser;
+    await db.transaction(async (tx) => {
+      await tx.update(epins).set({ status: "used", usedAt: new Date() }).where(eq(epins.id, pin.id));
+
+      const [insertedUser] = await tx.insert(users).values({
+        fullName: fullName.trim(),
+        email: email.toLowerCase().trim(),
+        mobileNumber: mobileNumber.trim(),
+        password: hashedPassword,
+        memberId: generatedMemberId,
+        kycStatus: "PENDING",
+        role: "user",
+        avatarUrl: "",
+        sponsorId: sponsor.memberId,
+      }).returning();
+      newUser = insertedUser;
+
+      await placeNewUserAndProcessCommissions(tx, newUser.id, generatedMemberId, sponsor.memberId);
     });
 
     return res.status(201).json({
       success: true,
       message: "User registered successfully!",
+      memberId: generatedMemberId,
     });
   } catch (error) {
     console.error("Registration Error:", error);
@@ -132,6 +156,7 @@ router.post("/login", authLimiter, async (req, res) => {
         email: user.email,
         mobileNumber: user.mobileNumber,
         role: user.role,
+        legPreference: user.legPreference || "right",
       },
     });
   } catch (error) {
@@ -141,7 +166,7 @@ router.post("/login", authLimiter, async (req, res) => {
 });
 
 // ==============================================================================
-// 3. FETCH PROFILE DETAILS (Screens 15 & 31)
+// 3. FETCH PROFILE DETAILS
 // ==============================================================================
 router.get("/profile", verifyToken, async (req, res) => {
   try {
@@ -155,6 +180,11 @@ router.get("/profile", verifyToken, async (req, res) => {
         kycStatus: users.kycStatus,
         role: users.role,
         avatarUrl: users.avatarUrl,
+        sponsorId: users.sponsorId,
+        parentId: users.parentId,
+        binaryPosition: users.binaryPosition,
+        legPreference: users.legPreference,
+        createdAt: users.createdAt,
       })
       .from(users)
       .where(eq(users.id, req.user.userId))
@@ -283,5 +313,22 @@ router.get("/admin/users", verifyToken, verifyAdmin, async (req, res) => {
   } catch (error) {
     console.error("Admin Users Error:", error);
     return res.status(500).json({ error: "Failed to fetch users." });
+  }
+});
+
+// ==============================================================================
+// 7. TOGGLE LEG PREFERENCE
+// ==============================================================================
+router.put("/leg-preference", verifyToken, async (req, res) => {
+  const { legPreference } = req.body;
+  if (!["left", "right"].includes(legPreference)) {
+    return res.status(400).json({ error: "legPreference must be 'left' or 'right'." });
+  }
+  try {
+    await db.update(users).set({ legPreference, updatedAt: new Date() }).where(eq(users.id, req.user.userId));
+    return res.status(200).json({ success: true, legPreference });
+  } catch (error) {
+    console.error("Leg Preference Error:", error);
+    return res.status(500).json({ error: "Failed to update leg preference." });
   }
 });

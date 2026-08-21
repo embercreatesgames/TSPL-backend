@@ -4,9 +4,12 @@ import helmet from "helmet";
 import "dotenv/config";
 import authRoutes from "./routes/auth.js";
 import { verifyToken } from "./middleware/auth.js";
-import walletRoutes from "./routes/wallet.js"; // 🟢 Double check this import is correct
-import investmentRouter from "./routes/investments.js"; // 🔄 Import new router
-import historyRouter from "./routes/history.js"; // Path to your newly created file
+import walletRoutes from "./routes/wallet.js";
+import investmentRouter from "./routes/investments.js";
+import historyRouter from "./routes/history.js";
+import epinRoutes from "./routes/epins.js";
+import genealogyRoutes from "./routes/genealogy.js";
+import earningsRoutes from "./routes/earnings.js";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -37,8 +40,11 @@ app.use(express.json({ limit: "10kb" })); // Mitigates body-parser Denial of Ser
 // Routes Declarations
 app.use("/api/auth", authRoutes);
 app.use("/api/wallet", walletRoutes);
-app.use("/api/investments", investmentRouter); // 🔄 Register to clean path segment
+app.use("/api/investments", investmentRouter);
 app.use("/history", historyRouter);
+app.use("/api/epins", epinRoutes);
+app.use("/api/genealogy", genealogyRoutes);
+app.use("/api/earnings", earningsRoutes);
 // Base Root Endpoint
 app.get("/", (req, res) => {
   return res.status(200).send(`
