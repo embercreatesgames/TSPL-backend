@@ -94,7 +94,8 @@ router.post("/register", authLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error("Registration Error:", error);
-    return res.status(500).json({ error: "Internal system server failure" });
+    const detail = process.env.NODE_ENV === "production" ? error.message : error.stack;
+    return res.status(500).json({ error: "Internal system server failure", detail });
   }
 });
 
