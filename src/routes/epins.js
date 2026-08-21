@@ -23,12 +23,12 @@ router.post("/member-purchase", verifyToken, async (req, res) => {
   const totalCost = PIN_COST * qty;
   try {
     const [wallet] = await db.select().from(wallets).where(eq(wallets.userId, req.user.userId)).limit(1);
-    if (!wallet || Number(wallet.balance) < totalCost) {
-      return res.status(400).json({ error: `Insufficient balance. Need ₹${totalCost}.` });
+    if (!wallet || Number(wallet.mlmBalance) < totalCost) {
+      return res.status(400).json({ error: `Insufficient MLM balance. Need ₹${totalCost}.` });
     }
     const pinCodes = [];
     await db.transaction(async (tx) => {
-      await tx.update(wallets).set({ balance: Number(wallet.balance) - totalCost, updatedAt: new Date() }).where(eq(wallets.userId, req.user.userId));
+      await tx.update(wallets).set({ mlmBalance: Number(wallet.mlmBalance) - totalCost, updatedAt: new Date() }).where(eq(wallets.userId, req.user.userId));
       for (let i = 0; i < qty; i++) {
         const code = generatePinCode();
         await tx.insert(epins).values({ pinCode: code, status: "active", generatedByUserId: req.user.userId });
