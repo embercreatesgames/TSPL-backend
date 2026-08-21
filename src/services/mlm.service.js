@@ -1,4 +1,4 @@
-import { eq, and, isNull, or } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "../config/db.js";
 import { users, binaryPoints, wallets, walletLedger } from "../db/schema.js";
 import { addHistory } from "../utils/logger.js";
@@ -8,7 +8,8 @@ const MATCHING_BONUS_PERCENT = 10;
 const DAILY_MATCHING_CAP = 50000;
 
 // ─── Find empty slot in a user's subtree ─────────────────────
-export async function findEmptySlot(tx, memberId, position) {
+export async function findEmptySlot(tx, memberId, position, depth = 0) {
+  if (depth > 20) return null;
   const [current] = await tx
     .select({ id: users.id, memberId: users.memberId })
     .from(users)
@@ -30,11 +31,11 @@ export async function findEmptySlot(tx, memberId, position) {
   if (position === "left") {
     if (!leftChild) return { parentId: current.memberId, position: "left" };
     if (!rightChild) return { parentId: current.memberId, position: "right" };
-    return findEmptySlot(tx, leftChild.memberId, "left");
+    return findEmptySlot(tx, leftChild.memberId, "left", depth + 1);
   } else {
     if (!rightChild) return { parentId: current.memberId, position: "right" };
     if (!leftChild) return { parentId: current.memberId, position: "left" };
-    return findEmptySlot(tx, rightChild.memberId, "right");
+    return findEmptySlot(tx, rightChild.memberId, "right", depth + 1);
   }
 }
 
@@ -127,9 +128,9 @@ export async function processMatchingBonus(tx, userId, userMemberId) {
     .where(eq(wallets.userId, userId))
     .limit(1);
   if (wallet) {
-    await tx.update(wallets).set({ balance: Number(wallet.balance) + bonus, updatedAt: new Date() }).where(eq(wallets.userId, userId));
+    await tx.update(wallets).set({ mlmBalance: Number(wallet.mlmBalance) + bonus, updatedAt: new Date() }).where(eq(wallets.userId, userId));
   } else {
-    await tx.insert(wallets).values({ userId, balance: bonus });
+    await tx.insert(wallets).values({ userId, mlmBalance: bonus });
   }
 
   await tx.insert(walletLedger).values({ userId, amount: bonus, type: "matching_bonus", description: `10% matching on ${matchAmount} BV matched volume` });
@@ -153,9 +154,9 @@ export async function awardDirectReferral(tx, sponsorUserId, newUserId, newMembe
     .where(eq(wallets.userId, sponsorUserId))
     .limit(1);
   if (wallet) {
-    await tx.update(wallets).set({ balance: Number(wallet.balance) + DIRECT_BONUS, updatedAt: new Date() }).where(eq(wallets.userId, sponsorUserId));
+    await tx.update(wallets).set({ mlmBalance: Number(wallet.mlmBalance) + DIRECT_BONUS, updatedAt: new Date() }).where(eq(wallets.userId, sponsorUserId));
   } else {
-    await tx.insert(wallets).values({ userId: sponsorUserId, balance: DIRECT_BONUS });
+    await tx.insert(wallets).values({ userId: sponsorUserId, mlmBalance: DIRECT_BONUS });
   }
   await tx.insert(walletLedger).values({ userId: sponsorUserId, amount: DIRECT_BONUS, type: "direct_commission", description: `Direct referral bonus for sponsoring ${newMemberId}` });
   await addHistory(tx, sponsorUserId, "MLM", "DIRECT_REFERRAL", `Direct referral bonus of ₹${DIRECT_BONUS} for sponsoring ${newMemberId}.`, { newUserId, directBonus: DIRECT_BONUS });
@@ -242,4 +243,24 @@ export function generatePinCode() {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;
+}
+
+// ─── Count full downline recursively ─────────────────────────
+export async function countDownline(tx, memberId) {
+  let leftCount = 0;
+  let rightCount = 0;
+  const queue = [memberId];
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    const children = await tx
+      .select({ memberId: users.memberId, binaryPosition: users.binaryPosition })
+      .from(users)
+      .where(eq(users.parentId, currentId));
+    for (const child of children) {
+      if (child.binaryPosition === "left") leftCount++;
+      else rightCount++;
+      queue.push(child.memberId);
+    }
+  }
+  return { leftCount, rightCount, totalDownline: leftCount + rightCount };
 }

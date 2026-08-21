@@ -39,6 +39,7 @@ router.get("/balance", verifyToken, async (req, res) => {
     return res.status(200).json({
       success: true,
       balance: Number(w.balance || 0),
+      mlmBalance: Number(w.mlmBalance || 0),
       investmentBalance: Number(w.investmentBalance || 0),
     });
   } catch {

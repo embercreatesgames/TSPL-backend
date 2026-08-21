@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../config/db.js";
 import { users, binaryPoints } from "../db/schema.js";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
-import { buildTree } from "../services/mlm.service.js";
+import { buildTree, countDownline } from "../services/mlm.service.js";
 
 const router = Router();
 
@@ -35,20 +35,13 @@ router.get("/my-points", verifyToken, async (req, res) => {
   }
 });
 
-// ─── GET: Downline count ──────────────────────────────────────
+// ─── GET: Downline count (full recursive) ──────────────────────
 router.get("/downline-count", verifyToken, async (req, res) => {
   try {
     const [user] = await db.select({ memberId: users.memberId }).from(users).where(eq(users.id, req.user.userId)).limit(1);
     if (!user) return res.status(404).json({ error: "User not found." });
-    const directLeft = await db.select().from(users).where(eq(users.parentId, user.memberId));
-    const directRight = directLeft.filter(u => u.binaryPosition === "right");
-    const directLeftUsers = directLeft.filter(u => u.binaryPosition === "left");
-    return res.status(200).json({
-      success: true,
-      leftCount: directLeftUsers.length,
-      rightCount: directRight.length,
-      totalDownline: directLeft.length,
-    });
+    const counts = await countDownline(db, user.memberId);
+    return res.status(200).json({ success: true, ...counts });
   } catch (error) {
     return res.status(500).json({ error: "Failed to fetch downline count." });
   }

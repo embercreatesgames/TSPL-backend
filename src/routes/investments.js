@@ -102,7 +102,6 @@ router.post("/invest-batch", verifyToken, async (req, res) => {
 
     return res.status(500).json({
       error: "Batch investment execution failed.",
-      debug: error.message,
     });
   }
 });

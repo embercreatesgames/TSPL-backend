@@ -31,12 +31,12 @@ export const users = pgTable("users", {
 // ==========================================
 export const wallets = pgTable("wallets", {
   id: serial("id").primaryKey(),
-  // Links directly to the user id property from the table above
   userId: integer("user_id")
     .references(() => users.id)
     .unique()
     .notNull(),
-  balance: integer("balance").default(0).notNull(), // Track in lowest unit (cents/paise) to prevent decimal calculation glitches
+  balance: integer("balance").default(0).notNull(),
+  mlmBalance: integer("mlm_balance").default(0).notNull(),
   investmentBalance: integer("investment_balance").default(0).notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

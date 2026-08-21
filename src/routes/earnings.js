@@ -9,12 +9,11 @@ const router = Router();
 // ─── GET: MLM wallet balance ──────────────────────────────────
 router.get("/balance", verifyToken, async (req, res) => {
   try {
+    const [wallet] = await db.select().from(wallets).where(eq(wallets.userId, req.user.userId)).limit(1);
     const [points] = await db.select().from(binaryPoints).where(eq(binaryPoints.userId, req.user.userId)).limit(1);
-    const entries = await db.select().from(walletLedger).where(eq(walletLedger.userId, req.user.userId));
-    const mlmBalance = entries.reduce((sum, e) => sum + Number(e.amount), 0);
     return res.status(200).json({
       success: true,
-      balance: mlmBalance,
+      balance: Number(wallet?.mlmBalance || 0),
       leftPoints: points?.leftPoints || 0,
       rightPoints: points?.rightPoints || 0,
     });

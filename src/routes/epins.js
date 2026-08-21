@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ilike } from "drizzle-orm";
 import { db } from "../config/db.js";
 import { epins, epinPurchases, users, wallets } from "../db/schema.js";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
@@ -9,25 +9,9 @@ import { addHistory } from "../utils/logger.js";
 const router = Router();
 
 // ─── PUBLIC: Buy E-PIN (guest, pre-registration) ─────────────
+// DISABLED: No payment verification. Enable only after integrating a real payment gateway.
 router.post("/public-purchase", async (req, res) => {
-  const { amount, email, paymentRef } = req.body;
-  if (!amount || !email || !paymentRef) {
-    return res.status(400).json({ error: "amount, email, and paymentRef are required." });
-  }
-  try {
-    const pinCode = generatePinCode();
-    await db.insert(epins).values({ pinCode, status: "active" });
-    await db.insert(epinPurchases).values({
-      amount: parseInt(amount),
-      paymentMethod: "online",
-      paymentRef: paymentRef.trim(),
-      status: "completed",
-    });
-    return res.status(201).json({ success: true, pinCode, message: "E-PIN purchased successfully. Check your email." });
-  } catch (error) {
-    console.error("Public E-PIN Purchase Error:", error);
-    return res.status(500).json({ error: "Failed to process E-PIN purchase." });
-  }
+  return res.status(501).json({ error: "Online E-PIN purchase is not yet available. Please contact your sponsor for an E-PIN." });
 });
 
 // ─── AUTHENTICATED: Buy E-PIN (member via wallet) ────────────
@@ -82,7 +66,7 @@ router.get("/validate/:pinCode", async (req, res) => {
 router.get("/validate-referral/:memberId", async (req, res) => {
   const { memberId } = req.params;
   try {
-    const [user] = await db.select({ memberId: users.memberId, fullName: users.fullName }).from(users).where(eq(users.memberId, memberId.toUpperCase().trim())).limit(1);
+    const [user] = await db.select({ memberId: users.memberId, fullName: users.fullName }).from(users).where(ilike(users.memberId, memberId.trim())).limit(1);
     if (!user) return res.status(404).json({ valid: false, error: "Referral ID not found." });
     return res.status(200).json({ valid: true, memberId: user.memberId, name: user.fullName });
   } catch (error) {
