@@ -257,3 +257,31 @@ router.post("/admin/setup", authLimiter, async (req, res) => {
     return res.status(500).json({ error: "Internal system server failure" });
   }
 });
+
+// ==============================================================================
+// 6. ADMIN - GET ALL USERS
+// ==============================================================================
+router.get("/admin/users", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const allUsers = await db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        email: users.email,
+        mobileNumber: users.mobileNumber,
+        memberId: users.memberId,
+        role: users.role,
+        kycStatus: users.kycStatus,
+        createdAt: users.createdAt,
+      })
+      .from(users);
+
+    return res.status(200).json({
+      success: true,
+      users: allUsers,
+    });
+  } catch (error) {
+    console.error("Admin Users Error:", error);
+    return res.status(500).json({ error: "Failed to fetch users." });
+  }
+});
