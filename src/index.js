@@ -13,28 +13,7 @@ import earningsRoutes from "./routes/earnings.js";
 const app = express();
 app.set("trust proxy", 1);
 
-// Global Security Middleware
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        // Allows CodeSandbox domains to embed your API preview
-        "frame-ancestors": [
-          "'self'",
-          "*.codesandbox.io",
-          "https://codesandbox.io",
-        ],
-      },
-    },
-    // Set X-Frame-Options to allow framing from the same origin
-    frameguard: { action: "sameorigin" },
-  })
-);
-
-//app.use(helmet()); // Sets standard, highly secure HTTP response headers
-
-// CORS must come before any routes
+// CORS MUST be first — before helmet — otherwise helmet strips/overrides headers
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
@@ -44,6 +23,9 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Security headers (after CORS so they don't override it)
+app.use(helmet());
 app.use(express.json({ limit: "10kb" })); // Mitigates body-parser Denial of Service vulnerabilities
 
 // Routes Declarations
