@@ -112,10 +112,11 @@ export async function processMatchingBonus(tx, userId, userMemberId) {
       and(
         eq(walletLedger.userId, userId),
         eq(walletLedger.type, "matching_bonus"),
-        eq(walletLedger.description, "daily_cap_check")
       )
     );
-  const todayTotal = todayPayouts.reduce((sum, r) => sum + Number(r.amount), 0);
+  const todayTotal = todayPayouts
+    .filter(r => new Date(r.createdAt) >= todayStart)
+    .reduce((sum, r) => sum + Number(r.amount), 0);
   const remainingCap = Math.max(0, DAILY_MATCHING_CAP - todayTotal);
   const bonus = Math.min(Math.floor((matchAmount * MATCHING_BONUS_PERCENT) / 100), remainingCap);
   if (bonus <= 0) return { matched: 0, bonus: 0 };

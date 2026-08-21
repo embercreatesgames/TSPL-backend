@@ -37,18 +37,6 @@ router.post("/register", authLimiter, async (req, res) => {
       return res.status(404).json({ error: "Invalid Referral ID. Sponsor not found." });
     }
 
-    const [pin] = await db
-      .select()
-      .from(epins)
-      .where(eq(epins.pinCode, pinCode.toUpperCase().trim()))
-      .limit(1);
-    if (!pin) {
-      return res.status(404).json({ error: "Invalid E-PIN. Not found." });
-    }
-    if (pin.status !== "active") {
-      return res.status(400).json({ error: "E-PIN has already been used." });
-    }
-
     const existingUser = await db
       .select()
       .from(users)
@@ -65,11 +53,23 @@ router.post("/register", authLimiter, async (req, res) => {
 
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
-    const generatedMemberId = "MARUP" + String(Date.now()).slice(-6);
 
     let newUser;
     await db.transaction(async (tx) => {
-      await tx.update(epins).set({ status: "used", usedAt: new Date() }).where(eq(epins.id, pin.id));
+      // PIN lookup + validation inside transaction to prevent race condition
+      const [pin] = await tx
+        .select()
+        .from(epins)
+        .where(eq(epins.pinCode, pinCode.toUpperCase().trim()))
+        .limit(1);
+      if (!pin) throw new Error("INVALID_PIN:Invalid E-PIN. Not found.");
+      if (pin.status !== "active") throw new Error("PIN_USED:E-PIN has already been used.");
+
+      await tx.update(epins).set({ status: "used", usedAt: new Date(), usedByUserId: sponsor.id }).where(eq(epins.id, pin.id));
+
+      // Unique member ID: timestamp + random 4 chars to prevent collision
+      const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const generatedMemberId = "MARUP" + String(Date.now()).slice(-6) + rand;
 
       const [insertedUser] = await tx.insert(users).values({
         fullName: fullName.trim(),
@@ -90,12 +90,17 @@ router.post("/register", authLimiter, async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "User registered successfully!",
-      memberId: generatedMemberId,
+      memberId: newUser.memberId,
     });
   } catch (error) {
     console.error("Registration Error:", error);
-    const detail = process.env.NODE_ENV === "production" ? error.message : error.stack;
-    return res.status(500).json({ error: "Internal system server failure", detail });
+    if (error.message?.startsWith("INVALID_PIN:")) {
+      return res.status(404).json({ error: error.message.split(":")[1] });
+    }
+    if (error.message?.startsWith("PIN_USED:")) {
+      return res.status(400).json({ error: error.message.split(":")[1] });
+    }
+    return res.status(500).json({ error: "Internal system server failure" });
   }
 });
 
@@ -241,9 +246,22 @@ router.put("/profile/update", verifyToken, async (req, res) => {
 export default router;
 
 // ==============================================================================
-// 5. ADMIN SETUP (one-time use)
+// 5. ADMIN SETUP (one-time use — disabled after first admin exists)
 // ==============================================================================
 router.post("/admin/setup", authLimiter, async (req, res) => {
+  try {
+    const [existingAdmin] = await db
+      .select()
+      .from(users)
+      .where(eq(users.role, "admin"))
+      .limit(1);
+    if (existingAdmin) {
+      return res.status(403).json({ error: "Admin already exists. Use /admin/users to manage." });
+    }
+  } catch {
+    return res.status(500).json({ error: "Server error." });
+  }
+
   const { fullName, email, mobileNumber, password } = req.body;
 
   if (!fullName || !email || !mobileNumber || !password) {

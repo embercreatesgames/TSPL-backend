@@ -34,6 +34,7 @@ router.post("/public-purchase", async (req, res) => {
 router.post("/member-purchase", verifyToken, async (req, res) => {
   const { quantity } = req.body;
   const qty = parseInt(quantity) || 1;
+  if (qty < 1 || qty > 50) return res.status(400).json({ error: "Quantity must be between 1 and 50." });
   const PIN_COST = 200;
   const totalCost = PIN_COST * qty;
   try {
@@ -41,17 +42,23 @@ router.post("/member-purchase", verifyToken, async (req, res) => {
     if (!wallet || Number(wallet.balance) < totalCost) {
       return res.status(400).json({ error: `Insufficient balance. Need ₹${totalCost}.` });
     }
+    const pinCodes = [];
     await db.transaction(async (tx) => {
       await tx.update(wallets).set({ balance: Number(wallet.balance) - totalCost, updatedAt: new Date() }).where(eq(wallets.userId, req.user.userId));
-      const pinCodes = [];
       for (let i = 0; i < qty; i++) {
         const code = generatePinCode();
         await tx.insert(epins).values({ pinCode: code, status: "active", generatedByUserId: req.user.userId });
         pinCodes.push(code);
       }
+      await tx.insert(epinPurchases).values({
+        userId: req.user.userId,
+        amount: totalCost,
+        paymentMethod: "wallet",
+        status: "completed",
+      });
       await addHistory(tx, req.user.userId, "MLM", "EPIN_PURCHASE", `Purchased ${qty} E-PIN(s) for ₹${totalCost}.`, { pinCodes, totalCost });
     });
-    return res.status(201).json({ success: true, pins: qty, message: `${qty} E-PIN(s) generated successfully.` });
+    return res.status(201).json({ success: true, pins: pinCodes, count: pinCodes.length, message: `${qty} E-PIN(s) generated successfully.` });
   } catch (error) {
     console.error("Member E-PIN Purchase Error:", error);
     return res.status(500).json({ error: "Failed to process E-PIN purchase." });
@@ -110,6 +117,16 @@ router.get("/admin/list", verifyToken, verifyAdmin, async (req, res) => {
     return res.status(200).json({ success: true, pins: allPins });
   } catch (error) {
     return res.status(500).json({ error: "Failed to fetch E-PINs." });
+  }
+});
+
+// ─── MEMBER: List my purchased E-PINs ─────────────────────────
+router.get("/my-pins", verifyToken, async (req, res) => {
+  try {
+    const pins = await db.select().from(epins).where(eq(epins.generatedByUserId, req.user.userId));
+    return res.status(200).json({ success: true, pins });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to fetch your E-PINs." });
   }
 });
 
