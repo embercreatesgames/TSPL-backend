@@ -1,5 +1,4 @@
 import express from "express";
-import cors from "cors";
 import helmet from "helmet";
 import "dotenv/config";
 import authRoutes from "./routes/auth.js";
@@ -34,7 +33,17 @@ app.use(
 );
 
 //app.use(helmet()); // Sets standard, highly secure HTTP response headers
-app.use(cors({ origin: "*" })); // Replace '*' with explicit domain in production
+
+// CORS must come before any routes
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
 app.use(express.json({ limit: "10kb" })); // Mitigates body-parser Denial of Service vulnerabilities
 
 // Routes Declarations
