@@ -133,7 +133,6 @@ export async function processMatchingBonus(tx, userId, userMemberId) {
 
   await tx.insert(walletLedger).values({ userId, amount: bonus, type: "matching_bonus", description: `10% matching on ${matchAmount} BV matched volume` });
 
-  const deduction = position === "both" ? {} : {};
   await tx
     .update(binaryPoints)
     .set({ leftPoints: points.leftPoints - matchAmount, rightPoints: points.rightPoints - matchAmount, updatedAt: new Date() })
