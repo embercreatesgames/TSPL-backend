@@ -38,13 +38,13 @@ export async function findEmptySlot(tx, memberId, position) {
   }
 }
 
-// ─── Get all ancestors of a user ─────────────────────────────
+// ─── Get all ancestors with the side each child is on ─────────
 export async function getAncestors(tx, memberId) {
   const ancestors = [];
   let currentId = memberId;
   while (currentId) {
     const [user] = await tx
-      .select({ parentId: users.parentId, memberId: users.memberId })
+      .select({ parentId: users.parentId, memberId: users.memberId, binaryPosition: users.binaryPosition })
       .from(users)
       .where(eq(users.memberId, currentId))
       .limit(1);
@@ -55,7 +55,7 @@ export async function getAncestors(tx, memberId) {
       .where(eq(users.memberId, user.parentId))
       .limit(1);
     if (!ancestor) break;
-    ancestors.push(ancestor);
+    ancestors.push({ ...ancestor, childPosition: user.binaryPosition });
     currentId = ancestor.memberId;
   }
   return ancestors;
@@ -184,7 +184,7 @@ export async function placeNewUserAndProcessCommissions(tx, newUserId, newMember
 
   const ancestors = await getAncestors(tx, newMemberId);
   for (const ancestor of ancestors) {
-    await addBvPoints(tx, ancestor.memberId, slot.position);
+    await addBvPoints(tx, ancestor.memberId, ancestor.childPosition);
     await processMatchingBonus(tx, ancestor.id, ancestor.memberId);
   }
 
