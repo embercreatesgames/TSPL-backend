@@ -25,7 +25,7 @@ router.get("/my-tree", verifyToken, async (req, res) => {
   try {
     const [user] = await db.select({ memberId: users.memberId }).from(users).where(eq(users.id, req.user.userId)).limit(1);
     if (!user) return res.status(404).json({ error: "User not found." });
-    const tree = await buildTree(db, user.memberId, Math.min(depth, 6));
+    const tree = await buildTree(db, user.memberId, depth);
     return res.status(200).json({ success: true, tree });
   } catch (error) {
     console.error("My Tree Error:", error);
@@ -63,7 +63,7 @@ router.get("/downline-count", verifyToken, async (req, res) => {
 router.get("/view-tree/:memberId", verifyToken, async (req, res) => {
   const depth = parseInt(req.query.depth) || 3;
   try {
-    const tree = await buildTree(db, req.params.memberId.toUpperCase(), Math.min(depth, 6));
+    const tree = await buildTree(db, req.params.memberId.toUpperCase(), depth);
     if (!tree) return res.status(404).json({ error: "User not found." });
     return res.status(200).json({ success: true, tree });
   } catch (error) {
