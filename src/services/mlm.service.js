@@ -193,65 +193,45 @@ export async function placeNewUserAndProcessCommissions(tx, newUserId, newMember
   return { parentSlot: slot, ancestorsProcessed: ancestors.length };
 }
 
-// ─── Build tree for visualization ────────────────────────────
+// ─── Build tree for visualization (single-query) ──────────────
 export async function buildTree(tx, memberId, depth = 3) {
-  const [node] = await tx
-    .select({
-      id: users.id,
-      memberId: users.memberId,
-      fullName: users.fullName,
-      createdAt: users.createdAt,
-      kycStatus: users.kycStatus,
-    })
+  const [root] = await tx
+    .select({ id: users.id, memberId: users.memberId })
     .from(users)
     .where(eq(users.memberId, memberId))
     .limit(1);
-  if (!node) return null;
+  if (!root) return null;
 
-  const [points] = await tx
-    .select()
-    .from(binaryPoints)
-    .where(eq(binaryPoints.userId, node.id))
-    .limit(1);
+  const allUsers = await tx.select().from(users);
+  const allPoints = await tx.select().from(binaryPoints);
 
-  if (depth <= 1) {
-    const [leftChild] = await tx
-      .select({ id: users.id, memberId: users.memberId, fullName: users.fullName })
-      .from(users)
-      .where(and(eq(users.parentId, memberId), eq(users.binaryPosition, "left")))
-      .limit(1);
-    const [rightChild] = await tx
-      .select({ id: users.id, memberId: users.memberId, fullName: users.fullName })
-      .from(users)
-      .where(and(eq(users.parentId, memberId), eq(users.binaryPosition, "right")))
-      .limit(1);
-    return {
-      ...node,
-      leftPoints: points?.leftPoints || 0,
-      rightPoints: points?.rightPoints || 0,
-      left: leftChild || null,
-      right: rightChild || null,
+  const userMap = new Map(allUsers.map(u => [u.memberId, u]));
+  const pointsMap = new Map(allPoints.map(p => [p.userId, p]));
+
+  function build(mid, d) {
+    const u = userMap.get(mid);
+    if (!u) return null;
+    const pts = pointsMap.get(u.id);
+    const node = {
+      id: u.id,
+      memberId: u.memberId,
+      fullName: u.fullName,
+      createdAt: u.createdAt,
+      kycStatus: u.kycStatus,
+      leftPoints: pts?.leftPoints || 0,
+      rightPoints: pts?.rightPoints || 0,
+      left: null,
+      right: null,
     };
+    if (d <= 0) return node;
+    const left = allUsers.find(c => c.parentId === mid && c.binaryPosition === "left");
+    const right = allUsers.find(c => c.parentId === mid && c.binaryPosition === "right");
+    if (left) node.left = build(left.memberId, d - 1);
+    if (right) node.right = build(right.memberId, d - 1);
+    return node;
   }
 
-  const [leftChild] = await tx
-    .select({ memberId: users.memberId })
-    .from(users)
-    .where(and(eq(users.parentId, memberId), eq(users.binaryPosition, "left")))
-    .limit(1);
-  const [rightChild] = await tx
-    .select({ memberId: users.memberId })
-    .from(users)
-    .where(and(eq(users.parentId, memberId), eq(users.binaryPosition, "right")))
-    .limit(1);
-
-  return {
-    ...node,
-    leftPoints: points?.leftPoints || 0,
-    rightPoints: points?.rightPoints || 0,
-    left: leftChild ? await buildTree(tx, leftChild.memberId, depth - 1) : null,
-    right: rightChild ? await buildTree(tx, rightChild.memberId, depth - 1) : null,
-  };
+  return build(memberId, depth);
 }
 
 // ─── Shallow node: user + immediate children + hasChildren flags ──
