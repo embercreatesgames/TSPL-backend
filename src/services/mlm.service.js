@@ -254,6 +254,58 @@ export async function buildTree(tx, memberId, depth = 3) {
   };
 }
 
+// ─── Shallow node: user + immediate children + hasChildren flags ──
+export async function buildShallowNode(tx, memberId) {
+  const [node] = await tx
+    .select({
+      id: users.id,
+      memberId: users.memberId,
+      fullName: users.fullName,
+      createdAt: users.createdAt,
+      kycStatus: users.kycStatus,
+    })
+    .from(users)
+    .where(eq(users.memberId, memberId))
+    .limit(1);
+  if (!node) return null;
+
+  const [points] = await tx
+    .select()
+    .from(binaryPoints)
+    .where(eq(binaryPoints.userId, node.id))
+    .limit(1);
+
+  const [leftChild] = await tx
+    .select({ id: users.id, memberId: users.memberId, fullName: users.fullName })
+    .from(users)
+    .where(and(eq(users.parentId, memberId), eq(users.binaryPosition, "left")))
+    .limit(1);
+  const [rightChild] = await tx
+    .select({ id: users.id, memberId: users.memberId, fullName: users.fullName })
+    .from(users)
+    .where(and(eq(users.parentId, memberId), eq(users.binaryPosition, "right")))
+    .limit(1);
+
+  let leftHasChildren = false;
+  let rightHasChildren = false;
+  if (leftChild) {
+    const [lc] = await tx.select({ id: users.id }).from(users).where(eq(users.parentId, leftChild.memberId)).limit(1);
+    leftHasChildren = !!lc;
+  }
+  if (rightChild) {
+    const [rc] = await tx.select({ id: users.id }).from(users).where(eq(users.parentId, rightChild.memberId)).limit(1);
+    rightHasChildren = !!rc;
+  }
+
+  return {
+    ...node,
+    leftPoints: points?.leftPoints || 0,
+    rightPoints: points?.rightPoints || 0,
+    left: leftChild ? { ...leftChild, hasChildren: leftHasChildren } : null,
+    right: rightChild ? { ...rightChild, hasChildren: rightHasChildren } : null,
+  };
+}
+
 // ─── Generate secure E-PIN code ──────────────────────────────
 export function generatePinCode() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

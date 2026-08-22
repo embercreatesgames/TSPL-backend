@@ -3,9 +3,21 @@ import { eq } from "drizzle-orm";
 import { db } from "../config/db.js";
 import { users, binaryPoints } from "../db/schema.js";
 import { verifyToken, verifyAdmin } from "../middleware/auth.js";
-import { buildTree, countDownline } from "../services/mlm.service.js";
+import { buildTree, buildShallowNode, countDownline } from "../services/mlm.service.js";
 
 const router = Router();
+
+// ─── GET: Shallow node (user + immediate children + hasChildren) ─
+router.get("/node/:memberId", verifyToken, async (req, res) => {
+  try {
+    const node = await buildShallowNode(db, req.params.memberId.toUpperCase());
+    if (!node) return res.status(404).json({ error: "User not found." });
+    return res.status(200).json({ success: true, node });
+  } catch (error) {
+    console.error("Node Fetch Error:", error);
+    return res.status(500).json({ error: "Failed to fetch node." });
+  }
+});
 
 // ─── GET: My binary tree (default 3 levels) ──────────────────
 router.get("/my-tree", verifyToken, async (req, res) => {
