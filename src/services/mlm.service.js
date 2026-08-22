@@ -195,7 +195,6 @@ export async function placeNewUserAndProcessCommissions(tx, newUserId, newMember
 
 // ─── Build tree for visualization ────────────────────────────
 export async function buildTree(tx, memberId, depth = 3) {
-  if (depth <= 0) return null;
   const [node] = await tx
     .select({
       id: users.id,
@@ -214,6 +213,26 @@ export async function buildTree(tx, memberId, depth = 3) {
     .from(binaryPoints)
     .where(eq(binaryPoints.userId, node.id))
     .limit(1);
+
+  if (depth <= 1) {
+    const [leftChild] = await tx
+      .select({ id: users.id, memberId: users.memberId, fullName: users.fullName })
+      .from(users)
+      .where(and(eq(users.parentId, memberId), eq(users.binaryPosition, "left")))
+      .limit(1);
+    const [rightChild] = await tx
+      .select({ id: users.id, memberId: users.memberId, fullName: users.fullName })
+      .from(users)
+      .where(and(eq(users.parentId, memberId), eq(users.binaryPosition, "right")))
+      .limit(1);
+    return {
+      ...node,
+      leftPoints: points?.leftPoints || 0,
+      rightPoints: points?.rightPoints || 0,
+      left: leftChild || null,
+      right: rightChild || null,
+    };
+  }
 
   const [leftChild] = await tx
     .select({ memberId: users.memberId })
