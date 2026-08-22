@@ -128,9 +128,9 @@ export async function processMatchingBonus(tx, userId, userMemberId) {
     .where(eq(wallets.userId, userId))
     .limit(1);
   if (wallet) {
-    await tx.update(wallets).set({ mlmBalance: Number(wallet.mlmBalance) + bonus, updatedAt: new Date() }).where(eq(wallets.userId, userId));
+    await tx.update(wallets).set({ balance: Number(wallet.balance) + bonus, updatedAt: new Date() }).where(eq(wallets.userId, userId));
   } else {
-    await tx.insert(wallets).values({ userId, mlmBalance: bonus });
+    await tx.insert(wallets).values({ userId, balance: bonus });
   }
 
   await tx.insert(walletLedger).values({ userId, amount: bonus, type: "matching_bonus", description: `10% matching on ${matchAmount} BV matched volume` });
@@ -154,9 +154,9 @@ export async function awardDirectReferral(tx, sponsorUserId, newUserId, newMembe
     .where(eq(wallets.userId, sponsorUserId))
     .limit(1);
   if (wallet) {
-    await tx.update(wallets).set({ mlmBalance: Number(wallet.mlmBalance) + DIRECT_BONUS, updatedAt: new Date() }).where(eq(wallets.userId, sponsorUserId));
+    await tx.update(wallets).set({ balance: Number(wallet.balance) + DIRECT_BONUS, updatedAt: new Date() }).where(eq(wallets.userId, sponsorUserId));
   } else {
-    await tx.insert(wallets).values({ userId: sponsorUserId, mlmBalance: DIRECT_BONUS });
+    await tx.insert(wallets).values({ userId: sponsorUserId, balance: DIRECT_BONUS });
   }
   await tx.insert(walletLedger).values({ userId: sponsorUserId, amount: DIRECT_BONUS, type: "direct_commission", description: `Direct referral bonus for sponsoring ${newMemberId}` });
   await addHistory(tx, sponsorUserId, "MLM", "DIRECT_REFERRAL", `Direct referral bonus of ₹${DIRECT_BONUS} for sponsoring ${newMemberId}.`, { newUserId, directBonus: DIRECT_BONUS });

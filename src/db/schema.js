@@ -36,7 +36,6 @@ export const wallets = pgTable("wallets", {
     .unique()
     .notNull(),
   balance: integer("balance").default(0).notNull(),
-  mlmBalance: integer("mlm_balance").default(0).notNull(),
   investmentBalance: integer("investment_balance").default(0).notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -6,14 +6,15 @@ import { verifyToken } from "../middleware/auth.js";
 
 const router = Router();
 
-// ─── GET: MLM wallet balance ──────────────────────────────────
+// ─── GET: MLM earnings summary (display only — money is in main wallet) ─
 router.get("/balance", verifyToken, async (req, res) => {
   try {
-    const [wallet] = await db.select().from(wallets).where(eq(wallets.userId, req.user.userId)).limit(1);
     const [points] = await db.select().from(binaryPoints).where(eq(binaryPoints.userId, req.user.userId)).limit(1);
+    const entries = await db.select().from(walletLedger).where(eq(walletLedger.userId, req.user.userId));
+    const totalEarned = entries.reduce((s, e) => s + Number(e.amount), 0);
     return res.status(200).json({
       success: true,
-      balance: Number(wallet?.mlmBalance || 0),
+      totalEarned,
       leftPoints: points?.leftPoints || 0,
       rightPoints: points?.rightPoints || 0,
     });
