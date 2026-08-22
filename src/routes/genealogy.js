@@ -63,7 +63,7 @@ router.get("/view-tree/:memberId", verifyToken, async (req, res) => {
 router.get("/admin/global-tree/:memberId", verifyToken, verifyAdmin, async (req, res) => {
   const depth = parseInt(req.query.depth) || 4;
   try {
-    const tree = await buildTree(db, req.params.memberId.toUpperCase(), Math.min(depth, 8));
+    const tree = await buildTree(db, req.params.memberId.toUpperCase(), depth);
     if (!tree) return res.status(404).json({ error: "User not found." });
     return res.status(200).json({ success: true, tree });
   } catch (error) {
